@@ -2,7 +2,7 @@
 
 import { useActionState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, ShieldCheck, LockKeyhole, Mail, LogIn, KeyRound } from 'lucide-react';
+import { AlertCircle, ShieldCheck, LockKeyhole, Mail, LogIn } from 'lucide-react';
 import { login } from '@/lib/actions';
 import { withPrevState } from '@/lib/actions/formState';
 
@@ -98,16 +98,6 @@ export function LoginForm() {
       <div className="flex items-center gap-2 border-t border-[rgba(0,140,255,0.1)] pt-4 text-xs text-[#4A6A8A]">
         <ShieldCheck size={13} className="text-[#008CFF]" />
         Solo administradores y docentes autorizados pueden acceder.
-      </div>
-
-      <div className="rounded-lg border border-dashed border-[rgba(0,140,255,0.2)] bg-[rgba(0,140,255,0.04)] p-3 text-xs text-[#8BA3BF]">
-        <span className="flex items-center gap-1.5 font-semibold text-[#9DD7FF]">
-          <KeyRound size={12} />
-          Modo demostración
-        </span>
-        Usa <code className="rounded bg-[rgba(0,140,255,0.12)] px-1 py-0.5 text-[#00AAFF]">admin@sysdict.test</code> y{' '}
-        <code className="rounded bg-[rgba(0,140,255,0.12)] px-1 py-0.5 text-[#00AAFF]">admin123</code> para
-        explorar el panel (sin configurar Supabase).
       </div>
     </form>
   );
