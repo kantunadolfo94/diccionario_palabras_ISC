@@ -7,10 +7,20 @@ import { cn, truncate } from '@/lib/utils';
 interface TermResultItemProps {
   term: Term;
   query?: string;
+  direction?: 'en-es' | 'es-en';
   className?: string;
 }
 
-export function TermResultItem({ term, query, className }: TermResultItemProps) {
+export function TermResultItem({
+  term,
+  query,
+  direction = 'en-es',
+  className,
+}: TermResultItemProps) {
+  const esEn = direction === 'es-en';
+  const sourceWord = esEn ? term.spanish_word : term.english_word;
+  const targetWord = esEn ? term.english_word : term.spanish_word;
+
   const highlight = (text: string) => {
     if (!query) return text;
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -43,10 +53,10 @@ export function TermResultItem({ term, query, className }: TermResultItemProps) 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <h3 className="truncate font-semibold text-white group-hover:text-[#00AAFF]">
-            {highlight(term.english_word)}
+            {highlight(sourceWord)}
           </h3>
           <span className="text-sm font-medium text-[#8BA3BF]">
-            <span className="text-[#008CFF]">→</span> {term.spanish_word}
+            <span className="text-[#008CFF]">→</span> {targetWord}
           </span>
         </div>
         <div className="mt-0.5 flex items-center gap-2">

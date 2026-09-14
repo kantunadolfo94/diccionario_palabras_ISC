@@ -39,16 +39,13 @@ export function SearchResults({
         (categoryFilter === 'all' || t.category_id === categoryFilter)
     );
     if (q) {
-      list = list.filter((t) =>
-        [
-          t.english_word,
-          t.spanish_word,
-          t.definition,
-          t.technical_definition,
-          t.example,
-          t.category?.name ?? '',
-        ].some((field) => field.toLowerCase().includes(q))
-      );
+      list = list.filter((t) => {
+        const sourceFields =
+          direction === 'en-es'
+            ? [t.english_word]
+            : [t.spanish_word, t.definition, t.technical_definition, t.example];
+        return sourceFields.some((field) => field.toLowerCase().includes(q));
+      });
     }
     const sorted = [...list].sort((a, b) =>
       direction === 'en-es'
@@ -74,7 +71,9 @@ export function SearchResults({
       {/* Live search state */}
       <div className="flex items-center gap-2 text-xs text-[#4A6A8A]">
         <Search size={13} className="text-[#008CFF]" />
-        Refinando resultados en tiempo real
+        {direction === 'en-es'
+          ? 'Escribes en inglés y ves la traducción en español'
+          : 'Escribes en español y ves la traducción en inglés'}
       </div>
 
       {/* Filters */}
@@ -114,7 +113,12 @@ export function SearchResults({
       ) : (
         <ul className="animate-[fadeIn_0.3s_ease] space-y-3">
           {results.map((term) => (
-            <TermResultItem key={term.id} term={term} query={query} />
+            <TermResultItem
+              key={term.id}
+              term={term}
+              query={query}
+              direction={direction}
+            />
           ))}
         </ul>
       )}

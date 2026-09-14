@@ -48,7 +48,11 @@ export function SearchBar({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus={autoFocus}
-          placeholder="Buscar una palabra en inglés o español..."
+          placeholder={
+            direction === 'en-es'
+              ? 'Buscar una palabra en inglés...'
+              : 'Buscar una palabra en español...'
+          }
           className="w-full bg-transparent text-base text-white placeholder-[#4A6A8A] outline-none"
         />
         <button
