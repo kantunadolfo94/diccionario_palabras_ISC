@@ -1,6 +1,6 @@
 import type { Category, Term } from '@/lib/types';
 
-// Mock data used when Supabase is not configured
+// Mock data used when Turso is not configured
 export const MOCK_CATEGORIES: Category[] = [
   { id: 'cat-prog', name: 'Programación', description: 'Lenguajes, algoritmos y paradigmas', icon: 'Code', color: '#6366F1', accent: '#818CF8', is_active: true, sort_order: 1, created_at: '', updated_at: '', term_count: 6 },
   { id: 'cat-db', name: 'Bases de datos', description: 'Sistemas de gestión y consulta de datos', icon: 'Database', color: '#0EA5E9', accent: '#38BDF8', is_active: true, sort_order: 2, created_at: '', updated_at: '', term_count: 5 },

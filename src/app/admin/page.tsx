@@ -8,7 +8,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { fetchAdminStats, fetchAdminTerms } from '@/lib/data';
-import { isSupabaseConfigured } from '@/lib/data';
+import { isDbConfigured } from '@/lib/data';
 
 export const metadata = { title: 'Dashboard' };
 
@@ -161,15 +161,15 @@ export default async function AdminDashboardPage() {
             </Link>
           </div>
           <div className="mt-5 rounded-lg border border-dashed border-[rgba(0,140,255,0.2)] bg-[rgba(0,140,255,0.03)] p-3 text-xs text-[#8BA3BF]">
-            {isSupabaseConfigured() ? (
+            {isDbConfigured() ? (
               <span className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-[#34D399]" />
-                Conectado a Supabase
+                Conectado a Turso
               </span>
             ) : (
               <span className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-[#FCD34D]" />
-                Supabase no configurado · modo demostración
+                Turso no configurado · modo demostración
               </span>
             )}
           </div>

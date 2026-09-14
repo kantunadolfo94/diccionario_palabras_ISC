@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Settings, Database, Palette, Info, CloudOff, Cloud } from 'lucide-react';
-import { isSupabaseConfigured } from '@/lib/data';
+import { isDbConfigured } from '@/lib/data';
 import { LocalDataPanel } from '@/components/admin/LocalDataPanel';
 
 export const metadata: Metadata = {
@@ -8,10 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminConfiguracionPage() {
-  const supabaseConfigured = isSupabaseConfigured();
+  const dbConfigured = isDbConfigured();
 
   const renderRows = [
-    ['Almacenamiento', supabaseConfigured ? 'Supabase (remoto)' : 'Modo demostración (memoria)'],
+    ['Almacenamiento', dbConfigured ? 'Turso (remoto)' : 'Modo demostración (memoria)'],
     ['Búsqueda', 'Texto en inglés y español, con sinónimos'],
     ['Idiomas', 'Inglés (término) → Español (traducción)'],
     ['Favoritos', 'Favoritos y historial en el navegador'],
@@ -35,26 +35,26 @@ export default async function AdminConfiguracionPage() {
         <div
           className={
             'flex items-start gap-3 rounded-lg border px-4 py-3 ' +
-            (supabaseConfigured
+            (dbConfigured
               ? 'border-[rgba(16,185,129,0.3)] bg-[rgba(16,185,129,0.08)]'
               : 'border-[rgba(250,204,21,0.3)] bg-[rgba(250,204,21,0.08)]')
           }
         >
-          {supabaseConfigured ? (
+          {dbConfigured ? (
             <Cloud size={18} className="mt-0.5 shrink-0 text-[#34D399]" />
           ) : (
             <CloudOff size={18} className="mt-0.5 shrink-0 text-[#FCD34D]" />
           )}
           <div>
             <p className="text-sm font-semibold text-white">
-              {supabaseConfigured
-                ? 'Supabase configurado'
+              {dbConfigured
+                ? 'Turso configurado'
                 : 'Modo demostración activo'}
             </p>
             <p className="mt-1 text-xs leading-relaxed text-[#8BA3BF]">
-              {supabaseConfigured
-                ? 'La aplicación usa Supabase como base de datos, autenticación y almacenamiento.'
-                : 'No se detectaron las variables de entorno de Supabase. Los datos se guardan en memoria del servidor y se pierden al reiniciar. Agrega NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en el archivo .env.local para conectar a Supabase.'}
+              {dbConfigured
+                ? 'La aplicación usa Turso (libsql) como base de datos y gestiona su propia autenticación con sesiones.'
+                : 'No se detectaron las variables de entorno de Turso. Los datos se guardan en memoria del servidor y se pierden al reiniciar. Agrega TURSO_DATABASE_URL y TURSO_AUTH_TOKEN en el archivo .env.local para conectar a Turso.'}
             </p>
           </div>
         </div>

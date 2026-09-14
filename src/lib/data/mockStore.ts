@@ -3,7 +3,7 @@ import { MOCK_CATEGORIES, MOCK_TERMS } from '@/lib/data/mockData';
 
 // ============================================================
 // In-memory mock store.
-// Se usa cuando Supabase no está configurado para que el panel
+// Se usa cuando Turso no está configurado para que el panel
 // administrativo sea funcional durante el desarrollo/demostración.
 // ============================================================
 

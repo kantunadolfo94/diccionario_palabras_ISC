@@ -3,8 +3,23 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
+import { randomUUID } from 'node:crypto';
 import type { UserRole, Term } from '@/lib/types';
-import { isSupabaseConfigured } from '@/lib/data';
+import {
+  isDbConfigured,
+  getDb,
+  toBool,
+  toStr,
+  type SqlRow,
+} from '@/lib/db';
+import {
+  SESSION_COOKIE,
+  SESSION_MAX_AGE,
+  verifyPassword,
+  createSession,
+  deleteSession,
+  getUserFromCookie,
+} from '@/lib/auth';
 import {
   mockStore,
   mockAddTerm,
@@ -27,6 +42,22 @@ export interface ActionResult {
   success?: string;
 }
 
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+function mapUserRow(row: SqlRow): {
+  id: string;
+  name: string;
+  role: UserRole;
+  is_active: boolean;
+} {
+  return {
+    id: toStr(row.id),
+    name: toStr(row.name),
+    role: (row.role === 'admin' ? 'admin' : 'docente') as UserRole,
+    is_active: toBool(row.is_active),
+  };
+}
+
 // ============================================================
 // Auth
 // ============================================================
@@ -39,17 +70,41 @@ export async function login(formData: FormData): Promise<ActionResult> {
     return { error: 'Ingresa tu correo y contraseña.' };
   }
 
-  if (isSupabaseConfigured()) {
-    const { createClient } = await import('@/lib/supabase/server');
-    const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      return { error: 'Credenciales incorrectas. Verifica tus datos e intenta de nuevo.' };
+  if (isDbConfigured()) {
+    try {
+      const { rows } = await getDb().execute({
+        sql: 'SELECT * FROM users WHERE lower(email) = ? LIMIT 1',
+        args: [email],
+      });
+      const userRow = rows[0];
+      const valid = Boolean(
+        userRow && verifyPassword(password, toStr(userRow.password_hash))
+      );
+      if (!valid) {
+        return { error: 'Credenciales incorrectas. Verifica tus datos e intenta de nuevo.' };
+      }
+      const user = mapUserRow(userRow);
+      if (!user.is_active) {
+        return { error: 'Tu cuenta está desactivada. Contacta al administrador.' };
+      }
+      const sessionToken = await createSession(user.id);
+      const cookieStore = await cookies();
+      cookieStore.set(SESSION_COOKIE, sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: SESSION_MAX_AGE,
+      });
+      await insertActivityLog(user.id, 'login', 'auth', null, { email });
+      redirect(redirectTo.startsWith('/') ? redirectTo : '/admin');
+    } catch (err) {
+      if (isRedirectError(err)) throw err;
+      return { error: 'No se pudo iniciar sesión. Intenta de nuevo.' };
     }
-    redirect(redirectTo.startsWith('/') ? redirectTo : '/admin');
   }
 
-  // Modo demostración (Supabase no configurado)
+  // Modo demostración (Turso no configurado)
   if (email === DEMO_ADMIN_EMAIL && password === DEMO_ADMIN_PASSWORD) {
     const cookieStore = await cookies();
     cookieStore.set(DEMO_COOKIE, 'admin', {
@@ -66,10 +121,8 @@ export async function login(formData: FormData): Promise<ActionResult> {
 }
 
 export async function logout(): Promise<void> {
-  if (isSupabaseConfigured()) {
-    const { createClient } = await import('@/lib/supabase/server');
-    const supabase = await createClient();
-    await supabase.auth.signOut();
+  if (isDbConfigured()) {
+    await deleteSession();
   } else {
     const cookieStore = await cookies();
     cookieStore.delete(DEMO_COOKIE);
@@ -83,51 +136,44 @@ export async function logout(): Promise<void> {
 type AuthContext = {
   userId: string;
   role: UserRole;
-  supabase: Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>> | null;
 };
 
 async function requireRole(
   roles: UserRole[] = ['admin', 'docente']
 ): Promise<AuthContext> {
-  if (isSupabaseConfigured()) {
-    const { createClient } = await import('@/lib/supabase/server');
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) throw new Error('No autorizado');
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, is_active')
-      .eq('id', user.id)
-      .single();
-    if (!profile || !profile.is_active || !roles.includes(profile.role)) {
-      throw new Error('Sin permisos suficientes');
+  if (isDbConfigured()) {
+    const user = await getUserFromCookie();
+    if (!user || !user.is_active || !roles.includes(user.role)) {
+      throw new Error('No autorizado');
     }
-    return { userId: user.id, role: profile.role, supabase };
+    return { userId: user.id, role: user.role };
   }
 
   const cookieStore = await cookies();
   const demo = (await cookieStore.get(DEMO_COOKIE))?.value;
   if (demo !== 'admin') throw new Error('No autorizado');
-  return { userId: 'demo-admin', role: 'admin', supabase: null };
+  return { userId: 'demo-admin', role: 'admin' };
 }
 
-async function logActivity(
-  ctx: AuthContext,
+async function insertActivityLog(
+  userId: string,
   action: string,
   entityType: string,
   entityId?: string | null,
   details?: Record<string, unknown>
 ): Promise<void> {
-  if (!ctx.supabase) return;
+  if (!isDbConfigured()) return;
   try {
-    await ctx.supabase.from('activity_logs').insert({
-      user_id: ctx.userId,
-      action,
-      entity_type: entityType,
-      entity_id: entityId ?? null,
-      details: details ?? {},
+    await getDb().execute({
+      sql: 'INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [
+        randomUUID(),
+        userId,
+        action,
+        entityType,
+        entityId ?? null,
+        JSON.stringify(details ?? {}),
+      ],
     });
   } catch {
     // logs are best-effort
@@ -170,29 +216,36 @@ export async function createTerm(formData: FormData): Promise<ActionResult> {
       is_daily_word,
     };
 
-    if (ctx.supabase) {
-      const { data, error } = await ctx.supabase
-        .from('terms')
-        .insert({ ...payload, created_by: ctx.userId })
-        .select('id')
-        .single();
-      if (error) {
-        return { error: `Error al guardar el término: ${error.message}` };
-      }
-      const termId = data.id;
-      if (relatedIds.length > 0) {
-        await ctx.supabase.from('related_terms').insert(
-          relatedIds
-            .filter((rid) => rid !== termId)
-            .map((rid) => ({ term_id: termId, related_term_id: rid }))
-        );
+    if (isDbConfigured()) {
+      const termId = randomUUID();
+      await getDb().execute({
+        sql: `INSERT INTO terms
+                (id, english_word, spanish_word, definition, technical_definition, example, category_id, created_by, status, is_daily_word)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          termId,
+          payload.english_word,
+          payload.spanish_word,
+          payload.definition,
+          payload.technical_definition,
+          payload.example,
+          payload.category_id,
+          ctx.userId,
+          payload.status,
+          payload.is_daily_word ? 1 : 0,
+        ],
+      });
+      for (const rid of relatedIds) {
+        if (rid === termId) continue;
+        await getDb().execute({
+          sql: 'INSERT INTO related_terms (id, term_id, related_term_id) VALUES (?, ?, ?)',
+          args: [randomUUID(), termId, rid],
+        });
       }
       if (is_daily_word) {
-        await ctx.supabase
-          .from('daily_words')
-          .upsert({ term_id: termId, date: new Date().toISOString().slice(0, 10) });
+        await upsertDailyWord(termId, todayIso());
       }
-      await logActivity(ctx, 'create', 'term', termId, { english_word: en.value });
+      await insertActivityLog(ctx.userId, 'create', 'term', termId, { english_word: en.value });
       revalidatePath('/admin/terminos');
       revalidatePath('/');
       revalidatePath('/buscar');
@@ -247,23 +300,45 @@ export async function updateTerm(formData: FormData): Promise<ActionResult> {
       is_daily_word,
     };
 
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase.from('terms').update(payload).eq('id', id);
-      if (error) return { error: `Error al actualizar el término: ${error.message}` };
-      await ctx.supabase.from('related_terms').delete().eq('term_id', id);
-      if (relatedIds.length > 0) {
-        await ctx.supabase.from('related_terms').insert(
-          relatedIds
-            .filter((rid) => rid !== id)
-            .map((rid) => ({ term_id: id, related_term_id: rid }))
-        );
+    if (isDbConfigured()) {
+      await getDb().execute({
+        sql: `UPDATE terms SET
+                english_word = ?, spanish_word = ?, definition = ?, technical_definition = ?, example = ?,
+                category_id = ?, status = ?, is_daily_word = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+              WHERE id = ?`,
+        args: [
+          payload.english_word,
+          payload.spanish_word,
+          payload.definition,
+          payload.technical_definition,
+          payload.example,
+          payload.category_id,
+          payload.status,
+          payload.is_daily_word ? 1 : 0,
+          id,
+        ],
+      });
+      await getDb().execute({
+        sql: 'DELETE FROM related_terms WHERE term_id = ?',
+        args: [id],
+      });
+      for (const rid of relatedIds) {
+        if (rid === id) continue;
+        await getDb().execute({
+          sql: 'INSERT INTO related_terms (id, term_id, related_term_id) VALUES (?, ?, ?)',
+          args: [randomUUID(), id, rid],
+        });
       }
       if (is_daily_word) {
-        await ctx.supabase
-          .from('daily_words')
-          .upsert({ term_id: id, date: new Date().toISOString().slice(0, 10) });
+        await upsertDailyWord(id, todayIso());
+      } else {
+        await getDb().execute({
+          sql: 'DELETE FROM daily_words WHERE term_id = ? AND date = ?',
+          args: [id, todayIso()],
+        });
       }
-      await logActivity(ctx, 'update', 'term', id, { english_word: en.value });
+      await insertActivityLog(ctx.userId, 'update', 'term', id, { english_word: en.value });
       revalidatePath('/admin/terminos');
       revalidatePath('/');
       revalidatePath('/buscar');
@@ -291,10 +366,12 @@ export async function deleteTerm(formData: FormData): Promise<ActionResult> {
   try {
     const ctx = await requireRole(['admin']);
     const id = String(formData.get('id') ?? '');
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase.from('terms').delete().eq('id', id);
-      if (error) return { error: `Error al eliminar el término: ${error.message}` };
-      await logActivity(ctx, 'delete', 'term', id, {});
+    if (isDbConfigured()) {
+      await getDb().execute({
+        sql: 'DELETE FROM terms WHERE id = ?',
+        args: [id],
+      });
+      await insertActivityLog(ctx.userId, 'delete', 'term', id, {});
       revalidatePath('/admin/terminos');
       revalidatePath('/');
       revalidatePath('/buscar');
@@ -314,28 +391,42 @@ export async function deleteTerm(formData: FormData): Promise<ActionResult> {
 // ============================================================
 // Categories CRUD
 // ============================================================
-export async function createCategory(formData: FormData): Promise<ActionResult> {
-  try {
-    const ctx = await requireRole(['admin']);
-    const name = requiredString(formData, 'name');
-    if (name.error) return { error: name.error };
-    const payload = {
-      name: name.value,
+function readCategoryPayload(formData: FormData) {
+  const name = requiredString(formData, 'name');
+  return {
+    name,
+    payload: {
       description: String(formData.get('description') ?? '').trim(),
       icon: String(formData.get('icon') ?? 'Code').trim() || 'Code',
       color: String(formData.get('color') ?? '#008CFF').trim() || '#008CFF',
       accent: String(formData.get('accent') ?? '#147EFF').trim() || '#147EFF',
       is_active: formData.get('is_active') !== 'off',
       sort_order: Number(formData.get('sort_order') ?? 0),
-    };
-    if (ctx.supabase) {
-      const { data, error } = await ctx.supabase
-        .from('categories')
-        .insert(payload)
-        .select('id')
-        .single();
-      if (error) return { error: `Error al crear la categoría: ${error.message}` };
-      await logActivity(ctx, 'create', 'category', data.id, { name: name.value });
+    },
+  };
+}
+
+export async function createCategory(formData: FormData): Promise<ActionResult> {
+  try {
+    const ctx = await requireRole(['admin']);
+    const { name, payload } = readCategoryPayload(formData);
+    if (name.error) return { error: name.error };
+    if (isDbConfigured()) {
+      const id = randomUUID();
+      await getDb().execute({
+        sql: 'INSERT INTO categories (id, name, description, icon, color, accent, is_active, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [
+          id,
+          name.value,
+          payload.description,
+          payload.icon,
+          payload.color,
+          payload.accent,
+          payload.is_active ? 1 : 0,
+          payload.sort_order,
+        ],
+      });
+      await insertActivityLog(ctx.userId, 'create', 'category', id, { name: name.value });
       revalidatePath('/admin/categorias');
       revalidatePath('/');
       revalidatePath('/categorias');
@@ -343,6 +434,7 @@ export async function createCategory(formData: FormData): Promise<ActionResult> 
     }
     mockAddCategory({
       id: mockGenerateId('cat'),
+      name: name.value,
       ...payload,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -361,21 +453,26 @@ export async function updateCategory(formData: FormData): Promise<ActionResult> 
   try {
     const ctx = await requireRole(['admin']);
     const id = String(formData.get('id') ?? '');
-    const name = requiredString(formData, 'name');
+    const { name, payload } = readCategoryPayload(formData);
     if (name.error) return { error: name.error };
-    const payload = {
-      name: name.value,
-      description: String(formData.get('description') ?? '').trim(),
-      icon: String(formData.get('icon') ?? 'Code').trim() || 'Code',
-      color: String(formData.get('color') ?? '#008CFF').trim() || '#008CFF',
-      accent: String(formData.get('accent') ?? '#147EFF').trim() || '#147EFF',
-      is_active: formData.get('is_active') !== 'off',
-      sort_order: Number(formData.get('sort_order') ?? 0),
-    };
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase.from('categories').update(payload).eq('id', id);
-      if (error) return { error: `Error al actualizar la categoría: ${error.message}` };
-      await logActivity(ctx, 'update', 'category', id, { name: name.value });
+    if (isDbConfigured()) {
+      await getDb().execute({
+        sql: `UPDATE categories SET
+                name = ?, description = ?, icon = ?, color = ?, accent = ?, is_active = ?, sort_order = ?,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+              WHERE id = ?`,
+        args: [
+          name.value,
+          payload.description,
+          payload.icon,
+          payload.color,
+          payload.accent,
+          payload.is_active ? 1 : 0,
+          payload.sort_order,
+          id,
+        ],
+      });
+      await insertActivityLog(ctx.userId, 'update', 'category', id, { name: name.value });
       revalidatePath('/admin/categorias');
       revalidatePath('/');
       revalidatePath('/categorias');
@@ -398,10 +495,12 @@ export async function deleteCategory(formData: FormData): Promise<ActionResult> 
   try {
     const ctx = await requireRole(['admin']);
     const id = String(formData.get('id') ?? '');
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase.from('categories').delete().eq('id', id);
-      if (error) return { error: `Error al eliminar la categoría: ${error.message}` };
-      await logActivity(ctx, 'delete', 'category', id, {});
+    if (isDbConfigured()) {
+      await getDb().execute({
+        sql: 'DELETE FROM categories WHERE id = ?',
+        args: [id],
+      });
+      await insertActivityLog(ctx.userId, 'delete', 'category', id, {});
       revalidatePath('/admin/categorias');
       revalidatePath('/');
       revalidatePath('/categorias');
@@ -421,18 +520,23 @@ export async function deleteCategory(formData: FormData): Promise<ActionResult> 
 // ============================================================
 // Daily word
 // ============================================================
+async function upsertDailyWord(termId: string, date: string): Promise<void> {
+  await getDb().execute({
+    sql: `INSERT INTO daily_words (id, term_id, date) VALUES (?, ?, ?)
+          ON CONFLICT(date) DO UPDATE SET term_id = excluded.term_id`,
+    args: [randomUUID(), termId, date],
+  });
+}
+
 export async function setDailyWord(formData: FormData): Promise<ActionResult> {
   try {
     const ctx = await requireRole(['admin']);
     const termId = String(formData.get('term_id') ?? '');
     const date = String(formData.get('date') ?? '').trim();
     if (!termId) return { error: 'Selecciona un término.' };
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase
-        .from('daily_words')
-        .upsert({ term_id: termId, date: date || new Date().toISOString().slice(0, 10) });
-      if (error) return { error: `Error al asignar la palabra del día: ${error.message}` };
-      await logActivity(ctx, 'set_daily_word', 'daily_word', termId, { date });
+    if (isDbConfigured()) {
+      await upsertDailyWord(termId, date || todayIso());
+      await insertActivityLog(ctx.userId, 'set_daily_word', 'daily_word', termId, { date });
       revalidatePath('/admin/palabra-del-dia');
       revalidatePath('/');
       return { success: 'Palabra del día asignada.' };
@@ -459,10 +563,12 @@ export async function updateUserRole(formData: FormData): Promise<ActionResult> 
     if (id === ctx.userId && role !== 'admin') {
       return { error: 'No puedes quitarte el rol de administrador a ti mismo.' };
     }
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase.from('profiles').update({ role }).eq('id', id);
-      if (error) return { error: `Error al actualizar el rol: ${error.message}` };
-      await logActivity(ctx, 'update_role', 'profile', id, { role });
+    if (isDbConfigured()) {
+      await getDb().execute({
+        sql: "UPDATE users SET role = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+        args: [role, id],
+      });
+      await insertActivityLog(ctx.userId, 'update_role', 'profile', id, { role });
       revalidatePath('/admin/usuarios');
       return { success: 'Rol actualizado.' };
     }
@@ -480,13 +586,12 @@ export async function toggleUserActive(formData: FormData): Promise<ActionResult
     const id = String(formData.get('id') ?? '');
     const isActive = formData.get('is_active') === 'true';
     if (id === ctx.userId) return { error: 'No puedes desactivar tu propia cuenta.' };
-    if (ctx.supabase) {
-      const { error } = await ctx.supabase
-        .from('profiles')
-        .update({ is_active: isActive })
-        .eq('id', id);
-      if (error) return { error: `Error al actualizar el usuario: ${error.message}` };
-      await logActivity(ctx, isActive ? 'deactivate_user' : 'activate_user', 'profile', id, {});
+    if (isDbConfigured()) {
+      await getDb().execute({
+        sql: "UPDATE users SET is_active = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+        args: [isActive ? 1 : 0, id],
+      });
+      await insertActivityLog(ctx.userId, isActive ? 'deactivate_user' : 'activate_user', 'profile', id, {});
       revalidatePath('/admin/usuarios');
       return { success: isActive ? 'Usuario activado.' : 'Usuario desactivado.' };
     }

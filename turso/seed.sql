@@ -1,12 +1,22 @@
 -- ============================================================
--- SysDictionary - Seed Data
--- Ejecutar DESPUÉS de schema.sql
+-- SysDictionary - Turso (SQLite) Seed Data
+-- Ejecutar con: node scripts/turso-setup.mjs (después de schema.sql)
 -- ============================================================
+
+-- ============================================================
+-- ADMIN USER (password por defecto: admin123)
+-- hash scrypt formato "salt:hash" (hex), generado con scripts/hash-password.mjs
+-- ============================================================
+INSERT INTO users (id, name, email, password_hash, role, is_active) VALUES
+  ('usr-admin-0000-0000-000000000001', 'Administrador', 'admin@sysdict.test',
+   '0d47cc3f0ee6b8eb58d1706f474c3fcd:87407ff398353045a8c6042c5c8ec677989fffaffeab02bed6e19e02223c19c33c5997a3beb9ad0cc793f836cc4a936b3973ed3bc1bfee6cd44bef2ad50e68e1',
+   'admin', 1)
+ON CONFLICT (email) DO NOTHING;
 
 -- ============================================================
 -- CATEGORIES
 -- ============================================================
-INSERT INTO public.categories (id, name, description, icon, color, accent, sort_order) VALUES
+INSERT INTO categories (id, name, description, icon, color, accent, sort_order) VALUES
   ('cat-prog-0001-0000-000000000001', 'Programación',          'Lenguajes, algoritmos y paradigmas de programación',                    'Code',          '#6366F1', '#818CF8', 1),
   ('cat-db00-0001-0000-000000000002', 'Bases de datos',         'Sistemas de gestión, modelado y consulta de datos',                     'Database',      '#0EA5E9', '#38BDF8', 2),
   ('cat-web0-0001-0000-000000000003', 'Desarrollo web',         'Frontend, backend y tecnologías para la web',                           'Globe',         '#10B981', '#34D399', 3),
@@ -24,7 +34,7 @@ ON CONFLICT (name) DO NOTHING;
 -- ============================================================
 -- TERMS
 -- ============================================================
-INSERT INTO public.terms (id, english_word, spanish_word, definition, technical_definition, example, category_id, status) VALUES
+INSERT INTO terms (id, english_word, spanish_word, definition, technical_definition, example, category_id, status) VALUES
 
 -- PROGRAMACIÓN
 ('trm-001-prog-0000-000000000001', 'Algorithm', 'Algoritmo',
@@ -189,53 +199,42 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================================
 -- RELATED TERMS
 -- ============================================================
-INSERT INTO public.related_terms (term_id, related_term_id) VALUES
-  -- Database relacionado con Query, Table, Record, Primary Key, SQL
-  ('trm-007-db00-0000-000000000007', 'trm-008-db00-0000-000000000008'),
-  ('trm-007-db00-0000-000000000007', 'trm-009-db00-0000-000000000009'),
-  ('trm-007-db00-0000-000000000007', 'trm-010-db00-0000-000000000010'),
-  ('trm-007-db00-0000-000000000007', 'trm-011-db00-0000-000000000011'),
-  ('trm-007-db00-0000-000000000007', 'trm-012-db00-0000-000000000012'),
-  -- Query relacionado con Database, SQL, Table
-  ('trm-008-db00-0000-000000000008', 'trm-007-db00-0000-000000000007'),
-  ('trm-008-db00-0000-000000000008', 'trm-011-db00-0000-000000000011'),
-  ('trm-008-db00-0000-000000000008', 'trm-009-db00-0000-000000000009'),
-  -- Table relacionado con Database, Record, Primary Key
-  ('trm-009-db00-0000-000000000009', 'trm-007-db00-0000-000000000007'),
-  ('trm-009-db00-0000-000000000009', 'trm-010-db00-0000-000000000010'),
-  ('trm-009-db00-0000-000000000009', 'trm-012-db00-0000-000000000012'),
-  -- API relacionado con Endpoint, Server, Protocol
-  ('trm-013-web0-0000-000000000013', 'trm-014-web0-0000-000000000014'),
-  ('trm-013-web0-0000-000000000013', 'trm-019-net0-0000-000000000019'),
-  ('trm-013-web0-0000-000000000013', 'trm-017-net0-0000-000000000017'),
-  -- Class relacionado con Object, Function
-  ('trm-004-prog-0000-000000000004', 'trm-005-prog-0000-000000000005'),
-  ('trm-004-prog-0000-000000000004', 'trm-003-prog-0000-000000000003'),
-  -- Object relacionado con Class
-  ('trm-005-prog-0000-000000000005', 'trm-004-prog-0000-000000000004'),
-  -- Function relacionado con Algorithm, Variable
-  ('trm-003-prog-0000-000000000003', 'trm-001-prog-0000-000000000001'),
-  ('trm-003-prog-0000-000000000003', 'trm-002-prog-0000-000000000002'),
-  -- Git relacionado con Repository, Deployment, Docker
-  ('trm-024-dop0-0000-000000000024', 'trm-015-web0-0000-000000000015'),
-  ('trm-024-dop0-0000-000000000024', 'trm-016-web0-0000-000000000016'),
-  ('trm-024-dop0-0000-000000000024', 'trm-025-dop0-0000-000000000025'),
-  -- Docker relacionado con Virtual Machine, Cloud, Git
-  ('trm-025-dop0-0000-000000000025', 'trm-022-sys0-0000-000000000022'),
-  ('trm-025-dop0-0000-000000000025', 'trm-021-cld0-0000-000000000021'),
-  ('trm-025-dop0-0000-000000000025', 'trm-024-dop0-0000-000000000024'),
-  -- Router relacionado con Server, Protocol, Firewall
-  ('trm-018-net0-0000-000000000018', 'trm-019-net0-0000-000000000019'),
-  ('trm-018-net0-0000-000000000018', 'trm-017-net0-0000-000000000017'),
-  ('trm-018-net0-0000-000000000018', 'trm-020-sec0-0000-000000000020'),
-  -- Framework relacionado con API, Deployment
-  ('trm-006-prog-0000-000000000006', 'trm-013-web0-0000-000000000013'),
-  ('trm-006-prog-0000-000000000006', 'trm-016-web0-0000-000000000016')
+INSERT INTO related_terms (id, term_id, related_term_id) VALUES
+  ('rel-0001', 'trm-007-db00-0000-000000000007', 'trm-008-db00-0000-000000000008'),
+  ('rel-0002', 'trm-007-db00-0000-000000000007', 'trm-009-db00-0000-000000000009'),
+  ('rel-0003', 'trm-007-db00-0000-000000000007', 'trm-010-db00-0000-000000000010'),
+  ('rel-0004', 'trm-007-db00-0000-000000000007', 'trm-011-db00-0000-000000000011'),
+  ('rel-0005', 'trm-007-db00-0000-000000000007', 'trm-012-db00-0000-000000000012'),
+  ('rel-0006', 'trm-008-db00-0000-000000000008', 'trm-007-db00-0000-000000000007'),
+  ('rel-0007', 'trm-008-db00-0000-000000000008', 'trm-011-db00-0000-000000000011'),
+  ('rel-0008', 'trm-008-db00-0000-000000000008', 'trm-009-db00-0000-000000000009'),
+  ('rel-0009', 'trm-009-db00-0000-000000000009', 'trm-007-db00-0000-000000000007'),
+  ('rel-0010', 'trm-009-db00-0000-000000000009', 'trm-010-db00-0000-000000000010'),
+  ('rel-0011', 'trm-009-db00-0000-000000000009', 'trm-012-db00-0000-000000000012'),
+  ('rel-0012', 'trm-013-web0-0000-000000000013', 'trm-014-web0-0000-000000000014'),
+  ('rel-0013', 'trm-013-web0-0000-000000000013', 'trm-019-net0-0000-000000000019'),
+  ('rel-0014', 'trm-013-web0-0000-000000000013', 'trm-017-net0-0000-000000000017'),
+  ('rel-0015', 'trm-004-prog-0000-000000000004', 'trm-005-prog-0000-000000000005'),
+  ('rel-0016', 'trm-004-prog-0000-000000000004', 'trm-003-prog-0000-000000000003'),
+  ('rel-0017', 'trm-005-prog-0000-000000000005', 'trm-004-prog-0000-000000000004'),
+  ('rel-0018', 'trm-003-prog-0000-000000000003', 'trm-001-prog-0000-000000000001'),
+  ('rel-0019', 'trm-003-prog-0000-000000000003', 'trm-002-prog-0000-000000000002'),
+  ('rel-0020', 'trm-024-dop0-0000-000000000024', 'trm-015-web0-0000-000000000015'),
+  ('rel-0021', 'trm-024-dop0-0000-000000000024', 'trm-016-web0-0000-000000000016'),
+  ('rel-0022', 'trm-024-dop0-0000-000000000024', 'trm-025-dop0-0000-000000000025'),
+  ('rel-0023', 'trm-025-dop0-0000-000000000025', 'trm-022-sys0-0000-000000000022'),
+  ('rel-0024', 'trm-025-dop0-0000-000000000025', 'trm-021-cld0-0000-000000000021'),
+  ('rel-0025', 'trm-025-dop0-0000-000000000025', 'trm-024-dop0-0000-000000000024'),
+  ('rel-0026', 'trm-018-net0-0000-000000000018', 'trm-019-net0-0000-000000000019'),
+  ('rel-0027', 'trm-018-net0-0000-000000000018', 'trm-017-net0-0000-000000000017'),
+  ('rel-0028', 'trm-018-net0-0000-000000000018', 'trm-020-sec0-0000-000000000020'),
+  ('rel-0029', 'trm-006-prog-0000-000000000006', 'trm-013-web0-0000-000000000013'),
+  ('rel-0030', 'trm-006-prog-0000-000000000006', 'trm-016-web0-0000-000000000016')
 ON CONFLICT (term_id, related_term_id) DO NOTHING;
 
 -- ============================================================
 -- DAILY WORD (Framework como palabra del día de hoy)
 -- ============================================================
-INSERT INTO public.daily_words (term_id, date) VALUES
-  ('trm-006-prog-0000-000000000006', CURRENT_DATE)
+INSERT INTO daily_words (id, term_id, date) VALUES
+  ('dly-0000-0000-0000-000000000001', 'trm-006-prog-0000-000000000006', date('now'))
 ON CONFLICT (date) DO NOTHING;

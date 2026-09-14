@@ -1,26 +1,29 @@
-import { isSupabaseConfigured } from '@/lib/data';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
+import { isDbConfigured } from '@/lib/db';
+import { getUserFromCookie } from '@/lib/auth';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
+import type { Profile } from '@/lib/types';
 
-async function getSessionUser() {
-  if (isSupabaseConfigured()) {
-    try {
-      const { createClient } = await import('@/lib/supabase/server');
-      const supabase = await createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('name, email, role')
-        .eq('id', user.id)
-        .single();
-      return profile ?? { name: user.email ?? 'Usuario', email: user.email, role: 'docente' };
-    } catch {
-      return null;
-    }
+const DEMO_COOKIE = 'sysdict_demo_user';
+
+async function getSessionUser(): Promise<Profile | null> {
+  if (isDbConfigured()) {
+    return await getUserFromCookie();
   }
-  return { name: 'Administrador demo', email: 'admin@sysdict.test', role: 'admin' };
+  const cookieStore = await cookies();
+  const cookie = (await cookieStore.get(DEMO_COOKIE))?.value;
+  if (cookie !== 'admin') return null;
+  return {
+    id: 'demo-admin',
+    name: 'Administrador demo',
+    email: 'admin@sysdict.test',
+    role: 'admin',
+    avatar_url: null,
+    is_active: true,
+    created_at: '',
+    updated_at: '',
+  };
 }
 
 export const metadata = {
@@ -33,19 +36,31 @@ export const metadata = {
 
 export default async function AdminLayout({ children }: LayoutProps<'/admin'>) {
   const user = await getSessionUser();
-  const demoMode = !isSupabaseConfigured();
+  const configured = isDbConfigured();
+
+  if (!user) {
+    redirect('/login?redirect=%2Fadmin');
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[#051222]">
       <AdminSidebar />
       <div className="flex flex-1 flex-col lg:pl-[250px]">
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          {demoMode && (
+          {!configured && (
             <div className="mb-6 rounded-xl border border-[rgba(245,158,11,0.3)] bg-[rgba(245,158,11,0.08)] px-4 py-3 text-xs text-[#FCD34D]">
-              <span className="font-bold">Modo demostración:</span> Supabase no está
+              <span className="font-bold">Modo demostración:</span> Turso no está
               configurado. Se usan datos de ejemplo en memoria; los cambios se
-              reinician al reiniciar el servidor. Configura supabase/schema.sql y
-              seed.sql en {'"Settings → API"'} para usar la base de datos real.
+              reinician al reiniciar el servidor. Configura{' '}
+              <code className="rounded bg-[rgba(245,158,11,0.15)] px-1">
+                TURSO_DATABASE_URL
+              </code>{' '}
+              y{' '}
+              <code className="rounded bg-[rgba(245,158,11,0.15)] px-1">
+                TURSO_AUTH_TOKEN
+              </code>{' '}
+              en <code className="rounded bg-[rgba(245,158,11,0.15)] px-1">.env.local</code>{' '}
+              para usar la base de datos real.
             </div>
           )}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
